@@ -160,8 +160,8 @@ test('Studio-Scan wird ausgewertet und liefert Hinweise', async () => {
       unanchoredParts: 7,
       scripts: [{ name: 'Main', path: 'ServerScriptService.Main' }],
       logs: [
-        'Infinite yield possible on Workspace.Enemies',
-        'ServerScriptService.Main:12: attempt to index nil with Coins',
+        { kind: 'Error', message: 'Infinite yield possible on Workspace.Enemies' },
+        { kind: 'Error', message: 'ServerScriptService.Main:12: attempt to index nil with Coins' },
       ],
     },
   });

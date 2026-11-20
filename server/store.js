@@ -184,8 +184,8 @@ export function addActions(projectId, actions) {
     // Der Compiler liefert die Nutzdaten direkt auf der Aktionsebene.
     // Für das Plugin werden sie gebündelt unter payload abgelegt.
     payload: action.payload || stripMeta(action),
-    status: action.requiresConfirmation === false ? 'approved' : 'pending',
-    requiresConfirmation: action.requiresConfirmation !== false,
+    status: 'pending',
+    requiresConfirmation: true,
     createdAt: now(),
     updatedAt: now(),
     attempts: 0,
@@ -249,7 +249,7 @@ export function rejectActions(projectId, actionIds = null) {
  * Bereits gelieferte, aber seit >45s nicht bestätigte Aktionen werden erneut
  * zugestellt, damit ein Studio-Neustart keine Aktion verschluckt.
  */
-export function claimApprovedActions(projectId, limit = 12) {
+export function claimApprovedActions(projectId, limit = 60) {
   const data = ensure();
   const cutoff = Date.now() - 45_000;
   const stale = (action) => action.status === 'delivered' && new Date(action.deliveredAt || 0).getTime() < cutoff;
