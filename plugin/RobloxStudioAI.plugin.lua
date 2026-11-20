@@ -3,8 +3,8 @@
 	Roblox Studio AI - Studio Plugin (Client-Seite der Bridge)
 
 	Installation:
-	1. In Roblox Studio: Plugins-Tab -> "Plugins-Ordner öffnen"
-	2. Diese Datei als RobloxStudioAI.lua in den Ordner legen
+	1. Roblox Studio: Plugins-Tab -> "Plugins-Ordner öffnen"
+	2. Diese Datei als RobloxStudioAI.lua in den Ordner legen (oder .rbxmX-Plugin nutzen)
 	3. Studio neu starten -> Werkzeugleiste "Roblox Studio AI"
 	4. Server-URL und Projekt-Token aus der Web-App eintragen und "Verbinden" drücken
 
@@ -16,9 +16,11 @@ local HttpService = game:GetService("HttpService")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
 local LogService = game:GetService("LogService")
-local Players = game:GetService("Players")
 
 local DEFAULT_SERVER = "__SERVER_URL__"
+
+local statusLabel
+local projectLabel
 
 local state = {
 	connected = false,
@@ -32,15 +34,15 @@ local state = {
 
 local function log(text)
 	state.status = tostring(text)
-	if logLabel then
-		logLabel.Text = state.status
+	if statusLabel then
+		statusLabel.Text = state.status
 	end
 	print("[Roblox Studio AI] " .. tostring(text))
 end
 
-/* ------------------------------------------------------------------ */
-/*  HTTP                                                              */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  HTTP
+-- ------------------------------------------------------------------
 
 local function request(method, path, body)
 	local url = string.gsub(state.serverUrl, "/+$", "") .. path
@@ -79,9 +81,9 @@ local function request(method, path, body)
 	return decoded
 end
 
-/* ------------------------------------------------------------------ */
-/*  Instanz-Helfer                                                    */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  Instanz-Helfer
+-- ------------------------------------------------------------------
 
 local function resolve(path)
 	if type(path) ~= "string" or path == "" then
@@ -107,17 +109,6 @@ local function resolve(path)
 		end
 	end
 	return current
-end
-
-local function ensureFolder(parent, name)
-	local existing = parent:FindFirstChild(name)
-	if existing then
-		return existing
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = name
-	folder.Parent = parent
-	return folder
 end
 
 local function applyValue(instance, key, value)
@@ -187,7 +178,7 @@ local function createScriptAt(path, scriptType, source)
 	local parentPath = table.concat(segments, ".")
 	local parent = resolve(parentPath)
 	if not parent then
-		return nil, "Elternobjekt nicht gefunden: " .. parentPath
+		return nil, "Elternobjekt nicht gefunden: " .. tostring(parentPath)
 	end
 	local existing = parent:FindFirstChild(name)
 	if existing then
@@ -205,9 +196,9 @@ local function createScriptAt(path, scriptType, source)
 	return scriptInstance
 end
 
-/* ------------------------------------------------------------------ */
-/*  Aktionsausführung                                                 */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  Aktionsausführung
+-- ------------------------------------------------------------------
 
 local function executeAction(action)
 	local payload = action.payload or {}
@@ -217,7 +208,7 @@ local function executeAction(action)
 		local target = resolve(payload.path)
 		if target then
 			target:Destroy()
-			return true, "Entfernt: " .. payload.path
+			return true, "Entfernt: " .. tostring(payload.path)
 		end
 		if payload.optional then
 			return true, "Nicht vorhanden (optional): " .. tostring(payload.path)
@@ -258,7 +249,7 @@ local function executeAction(action)
 		local target = resolve(payload.path)
 		if target then
 			Selection:Set({ target })
-			return true, "Ausgewählt: " .. payload.path
+			return true, "Ausgewählt: " .. tostring(payload.path)
 		end
 		return true, "Auswahl übersprungen"
 	end
@@ -281,14 +272,22 @@ local function runActions(actions)
 		log((ok and "OK: " or "Fehler: ") .. tostring(action.summary or action.type))
 	end
 	if #results > 0 then
-		request("POST", "/api/plugin/report", { token = state.token, results = results })
+		local response, err = request("POST", "/api/plugin/report", { token = state.token, results = results })
+		if not response then
+			log("Ergebnis nicht gesendet: " .. tostring(err))
+		end
 	end
 	return results
 end
 
-/* ------------------------------------------------------------------ */
-/*  Scan / Diagnose                                                   */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  Scan / Diagnose
+-- ------------------------------------------------------------------
+
+local function countLines(text)
+	local _, count = string.gsub(text or "", "\n", "\n")
+	return count
+end
 
 local function gatherScan()
 	local scripts = {}
@@ -314,7 +313,7 @@ local function gatherScan()
 				table.insert(scripts, {
 					path = descendant:GetFullName(),
 					className = descendant.ClassName,
-					lines = ok and select(2, string.gsub(source or "", "\n", "\n")) or 0,
+					lines = ok and countLines(source) or 0,
 					disabled = descendant:IsA("BaseScript") and descendant.Disabled or false,
 				})
 			end
@@ -362,16 +361,14 @@ local function sendScan()
 		return
 	end
 	log(string.format("Scan gesendet: %d Teile, %d Skripte, %d Meldungen", scan.parts, #scan.scripts, #scan.logs))
-	if response.advice and #response.advice > 0 then
-		for _, item in ipairs(response.advice) do
-			log("Hinweis: " .. tostring(item.title))
-		end
+	for _, item in ipairs(response.advice or {}) do
+		log("Hinweis: " .. tostring(item.title))
 	end
 end
 
-/* ------------------------------------------------------------------ */
-/*  Polling                                                           */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  Polling
+-- ------------------------------------------------------------------
 
 local function poll()
 	if not state.connected or state.polling then
@@ -386,7 +383,7 @@ local function poll()
 	})
 	state.polling = false
 	if not response then
-		log("Verbindung verloren: " .. tostring(err))
+		log("Verbindung fehlgeschlagen: " .. tostring(err))
 		return
 	end
 	state.lastPoll = os.time()
@@ -398,20 +395,21 @@ local function poll()
 	if #actions > 0 then
 		log(string.format("%d freigegebene Aktion(en) werden ausgeführt ...", #actions))
 		runActions(actions)
+	else
+		log("Verbunden - keine offenen Aktionen")
 	end
 end
 
-/* ------------------------------------------------------------------ */
-/*  Oberfläche                                                        */
-/* ------------------------------------------------------------------ */
+-- ------------------------------------------------------------------
+--  Oberfläche
+-- ------------------------------------------------------------------
 
 local toolbar = plugin:CreateToolbar("Roblox Studio AI")
 local button = toolbar:CreateButton("Roblox Studio AI", "KI-Spielgenerator öffnen", "rbxassetid://4458901886")
 
-local widgetInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, 360, 460, 300, 320)
+local widgetInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, 360, 470, 300, 320)
 local widget = plugin:CreateDockWidgetPluginGui("RobloxStudioAIWidget", widgetInfo)
 widget.Title = "Roblox Studio AI"
-widget.Name = "RobloxStudioAI"
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(1, 1)
@@ -477,9 +475,8 @@ label("KI-Bridge für Spielgenerierung", 36, 18, 12)
 local urlBox = field("Server-URL, z.B. https://meine-app.appjet.dev", 64, state.serverUrl)
 local tokenBox = field("Projekt-Token (rsa_...)", 100, "")
 label("Projekt", 138, 16, 12)
-local projectLabel = label("Kein Projekt", 154, 18, 13)
-local statusLabel = label("Nicht verbunden", 176, 18, 12)
-logLabel = statusLabel
+projectLabel = label("Kein Projekt", 154, 18, 13)
+statusLabel = label("Nicht verbunden", 176, 18, 12)
 
 actionButton("Verbinden", 204, function()
 	state.serverUrl = urlBox.Text
@@ -514,9 +511,8 @@ actionButton("Status aktualisieren", 324, function()
 	end
 end)
 
-label("Ablauf: In der Web-App Spiel beschreiben, Änderungen prüfen und freigeben. Das Plugin baut sie dann hier ein.", 366, 60, 12)
+label("Ablauf: In der Web-App Spiel beschreiben, Aktionen prüfen und freigeben. Das Plugin baut sie hier ein.", 366, 70, 12)
 
--- Token aus früheren Sitzungen laden
 local savedToken = plugin:GetSetting("RobloxStudioAI_Token")
 local savedServer = plugin:GetSetting("RobloxStudioAI_Server")
 if type(savedToken) == "string" and savedToken ~= "" then
