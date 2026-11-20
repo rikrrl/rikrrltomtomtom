@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -427,7 +428,7 @@ app.post('/api/projects/:id/analyze', async (req, res, next) => {
       engine: result.engine,
       actions: created.length,
     };
-    if (store.addAnalysis) store.addAnalysis(analysis);
+    store.addAnalysis(project.id, analysis);
     store.addMessage(project.id, {
       role: 'assistant',
       content:
