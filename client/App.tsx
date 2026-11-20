@@ -3,7 +3,6 @@ import {
   api,
   ApiError,
   absoluteUrl,
-  getKey,
   pluginDownloadUrl,
   setKey,
 } from './api';
