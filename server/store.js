@@ -63,6 +63,12 @@ export function flush() {
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
 
+/** Entfernt die Metafelder einer Compiler-Aktion, damit nur Nutzdaten bleiben. */
+function stripMeta(action) {
+  const { type, summary, requiresConfirmation, ...payload } = action || {};
+  return payload;
+}
+
 export function newToken() {
   return `rsa_${crypto.randomBytes(24).toString('hex')}`;
 }
