@@ -175,7 +175,9 @@ export function addActions(projectId, actions) {
     projectId,
     type: action.type,
     summary: action.summary || action.type,
-    payload: action.payload || action.tree || action,
+    // Der Compiler liefert die Nutzdaten direkt auf der Aktionsebene.
+    // Für das Plugin werden sie gebündelt unter payload abgelegt.
+    payload: action.payload || stripMeta(action),
     status: action.requiresConfirmation === false ? 'approved' : 'pending',
     requiresConfirmation: action.requiresConfirmation !== false,
     createdAt: now(),
