@@ -157,6 +157,20 @@ export function deleteProject(projectId) {
   return data.projects.length < before;
 }
 
+/* ------------------------------- Analysen ------------------------------- */
+
+export function addAnalysis(analysis) {
+  const data = ensure();
+  data.analyses.push(analysis);
+  scheduleSave();
+  return analysis;
+}
+
+export function listAnalyses(projectId, limit = 20) {
+  const data = ensure();
+  return data.analyses.filter((a) => a.projectId === projectId).slice(-limit).reverse();
+}
+
 /* -------------------------------- Chat --------------------------------- */
 
 export function addMessage(projectId, { role, content, meta = null }) {
